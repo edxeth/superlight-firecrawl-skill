@@ -17,10 +17,12 @@ Scrape and crawl web pages via the Firecrawl v2 REST API. A superlight agent ski
 
 | Aspect | MCP Server | This Skill |
 |--------|------------|------------|
-| Context cost | ~500-2000 tokens always | **~70 tokens always** + ~400 on-demand |
-| Tool schemas | Always in context | None |
+| Context cost | **~700+ tokens always**¹ | **~86 tokens always** + ~748 on-demand |
+| Tool schemas | Always in context | None (progressive disclosure) |
 | Setup | Requires MCP configuration | Drop-in skill directory |
 | Dependencies | Node.js runtime | bash, curl, jq (Linux/macOS) |
+
+¹ *Estimated from multi-tool MCP measurements (~14k tokens for 20 tools). [Source](https://scottspence.com/posts/optimising-mcp-server-context-usage-in-claude-code)*
 
 Best for: Users who need web scraping on-demand without persistent context overhead.
 
@@ -30,9 +32,11 @@ Uses Claude's [progressive disclosure](https://docs.anthropic.com/en/docs/agents
 
 | Level | When Loaded | Content | Tokens |
 |-------|-------------|---------|--------|
-| **Metadata** | Always (startup) | Skill description | ~70 |
-| **Instructions** | When triggered | SKILL.md protocol | ~400 |
-| **Resources** | As needed | troubleshooting.md | ~350 |
+| **Metadata** | Always (startup) | Skill description | ~86 |
+| **Instructions** | When triggered | SKILL.md protocol | ~748 |
+| **Resources** | As needed | troubleshooting.md | ~817 |
+
+*Token counts measured with [claudetokenizer.com](https://www.claudetokenizer.com/) (Claude Sonnet 4.5)*
 
 ## Installation
 
