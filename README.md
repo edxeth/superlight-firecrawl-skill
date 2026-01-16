@@ -40,16 +40,30 @@ Uses Claude's [progressive disclosure](https://docs.anthropic.com/en/docs/agents
 
 ## Installation
 
-### Claude Code
+### Quick Install (Recommended)
 
 ```bash
-git clone https://github.com/edxeth/superlight-firecrawl-skill.git ~/.claude/skills/firecrawl
+npx add-skill edxeth/superlight-firecrawl-skill
 ```
+
+The installer will prompt you to select which agents to install to (Claude Code, Cursor, OpenCode, Codex, Antigravity, etc.).
 
 ### Manual Installation
 
+Clone directly to your agent's skills directory:
+
+```bash
+# Claude Code
+git clone https://github.com/edxeth/superlight-firecrawl-skill.git ~/.claude/skills/firecrawl
+
+# OpenCode
+git clone https://github.com/edxeth/superlight-firecrawl-skill.git ~/.opencode/skill/firecrawl
 ```
-~/.claude/skills/firecrawl/
+
+**Directory structure:**
+
+```
+firecrawl/
 ├── SKILL.md
 ├── reference/
 │   └── troubleshooting.md
