@@ -43,7 +43,7 @@ Uses Claude's [progressive disclosure](https://docs.anthropic.com/en/docs/agents
 ### Quick Install (Recommended)
 
 ```bash
-npx add-skill edxeth/superlight-firecrawl-skill
+npx skills add edxeth/superlight-firecrawl-skill
 ```
 
 The installer will prompt you to select which agents to install to (Claude Code, Cursor, OpenCode, Codex, Antigravity, etc.).
