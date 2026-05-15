@@ -157,27 +157,26 @@ cmd_scrape() {
         exit 1
     fi
     
-    # Parse and output relevant content (truncated for token efficiency)
+    # Parse and output content — no truncation, full content passes through
     echo "$response" | jq -r '
         if .success == true and .data then
             if .data.markdown then
                 "## " + (.data.metadata.title // "Page Content") + "\n" +
                 "URL: " + (.data.metadata.sourceURL // "unknown") + "\n\n" +
-                (.data.markdown[:3000] // "")[:3000] +
-                (if (.data.markdown | length) > 3000 then "\n\n[...truncated, " + ((.data.markdown | length) | tostring) + " chars total]" else "" end)
+                .data.markdown
             elif .data.html then
-                (.data.html[:3000] // "")[:3000] + "\n\n[...truncated]"
+                .data.html
             elif .data.links then
-                (.data.links[:30] | join("\n"))
+                (.data.links | join("\n"))
             elif .data.screenshot then
                 "Screenshot: " + .data.screenshot
             else
-                (. | tostring)[:2000]
+                (. | tostring)
             end
         elif .error then
             "ERROR: " + .error
         else
-            "ERROR: " + ((. | tostring)[:500])
+            "ERROR: " + (. | tostring)
         end
     ' 2>/dev/null || echo "$response"
 }
@@ -331,17 +330,16 @@ cmd_extract() {
         exit 1
     fi
     
-    # Return JSON data (truncated for token efficiency)
+    # Return JSON data — no truncation, full content passes through
     echo "$response" | jq -r '
         if .success == true and .data.json then
-            (.data.json | tojson)[:5000] +
-            (if ((.data.json | tojson) | length) > 5000 then "\n[...truncated]" else "" end)
+            (.data.json | tojson)
         elif .success == true and .data then
-            (.data | tojson)[:5000]
+            (.data | tojson)
         elif .error then
             "ERROR: " + .error
         else
-            ((. | tostring)[:500])
+            (. | tostring)
         end
     ' 2>/dev/null || echo "$response"
 }
@@ -415,7 +413,7 @@ cmd_crawl() {
                         (.data[:10] | map(
                             "## " + (.metadata.title // "Page") + "\n" +
                             "URL: " + .metadata.sourceURL + "\n" +
-                            (.markdown[:500] // "")[:500] + "...\n"
+                            (.markdown // "") + "\n"
                         ) | join("\n---\n"))
                     else
                         "Crawl completed but no data returned."
