@@ -123,14 +123,16 @@ do_request() {
 cmd_scrape() {
     local url="${1:-}"
     local format="${2:-markdown}"
-    
+    local extra_opts="${3:-}"
+
     if [[ -z "$url" ]]; then
-        echo "Usage: firecrawl.sh scrape <url> [format]"
+        echo "Usage: firecrawl.sh scrape <url> [format] [options-json]"
         echo "Formats: markdown (default), html, links, screenshot"
+        echo "Options JSON: {\"waitFor\":3000,\"proxy\":\"stealth\",\"parsers\":[{\"type\":\"pdf\",\"mode\":\"ocr\"}]}"
         echo "Example: firecrawl.sh scrape \"https://example.com\""
         exit 1
     fi
-    
+
     local formats_array
     case "$format" in
         markdown) formats_array='["markdown"]' ;;
@@ -139,16 +141,17 @@ cmd_scrape() {
         screenshot) formats_array='[{"type":"screenshot","fullPage":true}]' ;;
         *) formats_array='["markdown"]' ;;
     esac
-    
+
     local json_payload
     json_payload=$(jq -n \
         --arg url "$url" \
         --argjson formats "$formats_array" \
+        --argjson extra "${extra_opts:-"null"}" \
         '{
             url: $url,
             formats: $formats,
             onlyMainContent: true
-        }'
+        } + (if $extra then $extra else {} end)'
     )
     
     local response
@@ -213,18 +216,17 @@ cmd_search() {
         exit 1
     fi
     
-    # Parse and output search results with scraped content
     echo "$response" | jq -r '
         if .success == true and .data then
             if (.data | type) == "array" then
-                (.data[:5] | to_entries | map(
+                (.data | to_entries | map(
                     "## " + ((.key + 1) | tostring) + ". " + (.value.title // "No title") + "\n" +
                     "URL: " + .value.url + "\n\n" +
-                    (.value.markdown[:1000] // .value.description // "")[:1000] + "...\n"
+                    (.value.markdown // .value.description // "No content") + "\n"
                 ) | join("\n---\n"))
             elif .data.web then
-                (.data.web[:5] | to_entries | map(
-                    ((.key + 1) | tostring) + ". " + (.value.title // "No title") + "\n   " + .value.url + "\n   " + (.value.description // "")[:200]
+                (.data.web | to_entries | map(
+                    ((.key + 1) | tostring) + ". " + (.value.title // "No title") + "\n   " + .value.url + "\n   " + (.value.description // "")
                 ) | join("\n\n"))
             else
                 . | tostring
@@ -286,7 +288,7 @@ cmd_map() {
     echo "$response" | jq -r '
         if .success == true and .links then
             "\(.links | length) URLs found:\n" +
-            (.links[:30] | map(
+            (.links | map(
                 if type == "object" then
                     .url + (if .title then " [" + .title + "]" else "" end)
                 else
@@ -410,9 +412,9 @@ cmd_crawl() {
                 echo "$status_response" | jq -r '
                     if .data then
                         "Crawled \(.data | length) pages:\n" +
-                        (.data[:10] | map(
+                        (.data | map(
                             "## " + (.metadata.title // "Page") + "\n" +
-                            "URL: " + .metadata.sourceURL + "\n" +
+                            "URL: " + (.metadata.sourceURL // "unknown") + "\n" +
                             (.markdown // "") + "\n"
                         ) | join("\n---\n"))
                     else
@@ -440,6 +442,103 @@ cmd_crawl() {
     echo "Check status later or increase timeout."
 }
 
+# Batch scrape multiple URLs
+# API: POST /v2/batch/scrape
+cmd_batch_scrape() {
+    local urls_json="${1:-}"
+    local format="${2:-markdown}"
+    local extra_opts="${3:-}"
+
+    if [[ -z "$urls_json" ]]; then
+        echo "Usage: firecrawl.sh batch-scrape '<urls-json-array>' [format] [options-json]"
+        echo "Example: firecrawl.sh batch-scrape '[\"https://a.com\",\"https://b.com\"]' markdown"
+        exit 1
+    fi
+
+    local formats_array
+    case "$format" in
+        markdown) formats_array='["markdown"]' ;;
+        html) formats_array='["html"]' ;;
+        links) formats_array='["links"]' ;;
+        *) formats_array='["markdown"]' ;;
+    esac
+
+    local json_payload
+    json_payload=$(jq -n \
+        --argjson urls "$urls_json" \
+        --argjson formats "$formats_array" \
+        --argjson extra "${extra_opts:-"null"}" \
+        '{
+            urls: $urls,
+            formats: $formats,
+            onlyMainContent: true
+        } + (if $extra then $extra else {} end)'
+    )
+
+    local response
+    if ! response=$(do_request "POST" "/batch/scrape" "$json_payload"); then
+        echo "ERROR: Batch scrape failed." >&2
+        exit 1
+    fi
+
+    local job_id
+    job_id=$(echo "$response" | jq -r '.id // empty')
+
+    if [[ -z "$job_id" ]]; then
+        echo "ERROR: No job ID returned - $response" >&2
+        exit 1
+    fi
+
+    echo "Batch scrape started. Job ID: $job_id" >&2
+    echo "Polling for results..." >&2
+
+    local poll_count=0
+    local max_polls=60
+    while [[ $poll_count -lt $max_polls ]]; do
+        sleep 2
+        local status_response
+        if ! status_response=$(do_request "GET" "/batch/scrape/$job_id" ""); then
+            echo "ERROR: Failed to get batch scrape status" >&2
+            exit 1
+        fi
+
+        local status
+        status=$(echo "$status_response" | jq -r '.status // "unknown"')
+
+        case "$status" in
+            completed)
+                echo "$status_response" | jq -r '
+                    if .data then
+                        (.data | map(
+                            "## " + (.metadata.title // "Page") + "\n" +
+                            "URL: " + (.metadata.sourceURL // .metadata.url // "unknown") + "\n\n" +
+                            (.markdown // "") + "\n"
+                        ) | join("\n---\n"))
+                    else
+                        "Batch scrape completed but no data returned."
+                    end
+                '
+                return 0
+                ;;
+            failed)
+                echo "ERROR: Batch scrape failed - $(echo "$status_response" | jq -r '.error // "unknown"')" >&2
+                exit 1
+                ;;
+            scraping)
+                local completed total
+                completed=$(echo "$status_response" | jq -r '.completed // 0')
+                total=$(echo "$status_response" | jq -r '.total // "?"')
+                echo "Progress: $completed/$total pages..." >&2
+                ;;
+        esac
+
+        poll_count=$((poll_count + 1))
+    done
+
+    echo "Batch scrape still in progress. Job ID: $job_id"
+    echo "Check status later or increase timeout."
+}
+
 # Main dispatch
 case "${1:-}" in
     scrape)
@@ -454,6 +553,10 @@ case "${1:-}" in
         shift
         cmd_map "$@"
         ;;
+    batch-scrape)
+        shift
+        cmd_batch_scrape "$@"
+        ;;
     extract)
         shift
         cmd_extract "$@"
@@ -467,18 +570,26 @@ case "${1:-}" in
 Firecrawl Web Scraping
 
 Usage:
-  firecrawl.sh scrape <url> [format]           Scrape a single URL
-  firecrawl.sh search <query> [limit]          Search web + scrape results
-  firecrawl.sh map <url> [limit] [search]      Discover all URLs on a site
-  firecrawl.sh extract <url> <prompt>          Extract structured JSON data
-  firecrawl.sh crawl <url> [limit] [depth]     Crawl entire site
+  firecrawl.sh scrape <url> [format] [options-json]    Scrape a single URL
+  firecrawl.sh batch-scrape '<urls-json>' [format]     Batch scrape multiple URLs
+  firecrawl.sh search <query> [limit]                  Search web + scrape results
+  firecrawl.sh map <url> [limit] [search]              Discover all URLs on a site
+  firecrawl.sh extract <url> <prompt>                  Extract structured JSON data
+  firecrawl.sh crawl <url> [limit] [depth]             Crawl entire site
 
-Formats (for scrape):
+Formats (for scrape/batch-scrape):
   markdown (default), html, links, screenshot
+
+Options JSON (for scrape/batch-scrape):
+  {"waitFor":3000}                    Wait for JS rendering (ms)
+  {"proxy":"stealth"}                 Use stealth proxy for protected sites
+  {"parsers":[{"type":"pdf","mode":"ocr"}]}   OCR mode for scanned PDFs
 
 Examples:
   firecrawl.sh scrape "https://example.com"
-  firecrawl.sh scrape "https://example.com" "html"
+  firecrawl.sh scrape "https://spa.com" markdown '{"waitFor":3000}'
+  firecrawl.sh scrape "https://arxiv.org/pdf/2301.00001" markdown '{"parsers":[{"type":"pdf"}]}'
+  firecrawl.sh batch-scrape '["https://a.com","https://b.com"]' markdown
   firecrawl.sh search "firecrawl web scraping API" 5
   firecrawl.sh map "https://firecrawl.dev" 50
   firecrawl.sh map "https://docs.firecrawl.dev" 100 "api reference"
@@ -492,7 +603,7 @@ Environment:
 EOF
         ;;
     *)
-        echo "Usage: firecrawl.sh {scrape|search|map|extract|crawl} [args...]"
+        echo "Usage: firecrawl.sh {scrape|batch-scrape|search|map|extract|crawl} [args...]"
         echo "Run 'firecrawl.sh --help' for examples"
         exit 1
         ;;
