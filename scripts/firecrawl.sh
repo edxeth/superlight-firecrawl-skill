@@ -416,7 +416,10 @@ cmd_crawl() {
                         (.data | map(
                             "## " + (.metadata.title // "Page") + "\n" +
                             "URL: " + (.metadata.sourceURL // "unknown") + "\n" +
-                            (.markdown // "") + "\n"
+                            (if .html then .html
+                            elif .links then (.links | join("\n"))
+                            else (.markdown // "")
+                            end) + "\n"
                         ) | join("\n---\n"))
                     else
                         "Crawl completed but no data returned."
@@ -510,12 +513,18 @@ cmd_batch_scrape() {
 
         case "$status" in
             completed)
-                echo "$status_response" | jq -r '
+                echo "$status_response" | jq -r --arg fmt "$format" '
                     if .data then
                         (.data | map(
                             "## " + (.metadata.title // "Page") + "\n" +
                             "URL: " + (.metadata.sourceURL // .metadata.url // "unknown") + "\n\n" +
-                            (.markdown // "") + "\n"
+                            (if $fmt == "html" then
+                                (.html // "")
+                            elif $fmt == "links" then
+                                ((.links // []) | join("\n"))
+                            else
+                                (.markdown // "")
+                            end) + "\n"
                         ) | join("\n---\n"))
                     else
                         "Batch scrape completed but no data returned."
