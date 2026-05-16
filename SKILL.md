@@ -7,6 +7,21 @@ description: Scrapes and crawls web pages, converting them to clean markdown or 
 
 Converts web pages into clean, LLM-ready markdown or structured data. Handles JavaScript rendering, anti-bot measures, PDFs, and complex sites. No output truncation.
 
+## When to Use
+
+| Situation | Use Firecrawl | Don't use Firecrawl |
+|---|---|---|
+| Parse PDFs | `scrape` with parsers option | — |
+| Discover all URLs on a site | `map` then `batch-scrape` | — |
+| Scrape 5+ pages in parallel | `batch-scrape` | — |
+| Crawl entire site recursively | `crawl` with depth | — |
+| Extract structured JSON | `extract` with prompt | — |
+| Anti-bot / Cloudflare sites | `scrape` with `"proxy":"stealth"` | — |
+| Fetch a single HTML page | — | Use TinyFish (returns more content) |
+| Semantic web search | — | Use Exa `search` |
+
+**Firecrawl is for crawling, mapping, PDFs, and structure. TinyFish beats it for single-page HTML.**
+
 ## Protocol
 
 ### Scrape a Single URL
