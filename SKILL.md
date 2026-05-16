@@ -5,90 +5,112 @@ description: Scrapes and crawls web pages, converting them to clean markdown or 
 
 # Firecrawl Web Scraping
 
-Converts web pages into clean, LLM-ready markdown or structured data. Handles JavaScript rendering, anti-bot measures, and complex sites.
+Converts web pages into clean, LLM-ready markdown or structured data. Handles JavaScript rendering, anti-bot measures, PDFs, and complex sites. No output truncation.
 
 ## When to Use
 
-**Use Firecrawl** when you need to:
-- Scrape a specific URL and get its content as markdown/HTML
-- Crawl an entire website or section recursively
-- Map a website to discover all its URLs
-- Search the web AND scrape the results in one operation
-- Extract structured JSON data from web pages
-- Handle JavaScript-rendered or dynamic content
-- Get screenshots of web pages
+| Situation | Use Firecrawl | Don't use Firecrawl |
+|---|---|---|
+| Parse PDFs | `scrape` with parsers option | — |
+| Discover all URLs on a site | `map` then `batch-scrape` | — |
+| Scrape 5+ pages in parallel | `batch-scrape` | — |
+| Crawl entire site recursively | `crawl` with depth | — |
+| Extract structured JSON | `extract` with prompt | — |
+| Anti-bot / Cloudflare sites | `scrape` with `"proxy":"stealth"` | — |
+| Fetch a single HTML page | — | Use TinyFish (returns more content) |
+| Semantic web search | — | Use Exa `search` |
+
+**Firecrawl is for crawling, mapping, PDFs, and structure. TinyFish beats it for single-page HTML.**
 
 ## Protocol
 
-### Step 1: Scrape a Single URL
+### Scrape a Single URL
 
 ```bash
-scripts/firecrawl.sh scrape "<url>" [format]
+scripts/firecrawl.sh scrape "<url>" [format] [options-json]
 ```
 
 **Formats:** `markdown` (default), `html`, `links`, `screenshot`
 
-**Example:**
+**Options JSON** (optional 3rd arg): `{"waitFor":3000,"proxy":"stealth","parsers":[{"type":"pdf","mode":"ocr"}]}`
+
+**Examples:**
 ```bash
 scripts/firecrawl.sh scrape "https://docs.firecrawl.dev/introduction"
-scripts/firecrawl.sh scrape "https://example.com" "html"
+scripts/firecrawl.sh scrape "https://spa-app.com" markdown '{"waitFor":3000}'
+scripts/firecrawl.sh scrape "https://arxiv.org/pdf/2301.00001" markdown '{"parsers":[{"type":"pdf"}]}'
 ```
 
-### Step 2: Search Web + Scrape Results
+### Batch Scrape Multiple URLs
+
+```bash
+scripts/firecrawl.sh batch-scrape '<urls-json-array>' [format] [options-json]
+```
+
+Processes multiple URLs in parallel via job polling. Use after `map` to scrape discovered pages.
+
+**Examples:**
+```bash
+scripts/firecrawl.sh batch-scrape '["https://a.com","https://b.com","https://c.com"]' markdown
+scripts/firecrawl.sh batch-scrape '["https://docs.site.com/api","https://docs.site.com/guide"]' markdown '{"waitFor":2000}'
+```
+
+### Search Web + Scrape Results
 
 ```bash
 scripts/firecrawl.sh search "<query>" [limit]
 ```
 
-**Example:**
-```bash
-scripts/firecrawl.sh search "firecrawl web scraping API" 5
-```
-
-### Step 3: Map Website URLs
+### Map Website URLs
 
 ```bash
 scripts/firecrawl.sh map "<url>" [limit] [search]
 ```
 
-**Example:**
+Discovers all URLs on a site. Use as first step before batch-scrape.
+
+**Examples:**
 ```bash
 scripts/firecrawl.sh map "https://firecrawl.dev" 50
 scripts/firecrawl.sh map "https://docs.firecrawl.dev" 100 "api reference"
 ```
 
-### Step 4: Extract Structured JSON (Single Page)
+### Extract Structured JSON
 
 ```bash
 scripts/firecrawl.sh extract "<url>" "<prompt>"
 ```
 
-Uses Firecrawl's LLM extraction to return structured JSON from a single page.
-
 **Example:**
 ```bash
-scripts/firecrawl.sh extract "https://firecrawl.dev" "Extract company name, mission, and pricing tiers"
+scripts/firecrawl.sh extract "https://firecrawl.dev" "Extract pricing tiers with name, price, and features"
 ```
 
-### Step 5: Crawl Entire Site
+### Crawl Entire Site
 
 ```bash
 scripts/firecrawl.sh crawl "<url>" [limit] [depth]
 ```
 
-**Example:**
-```bash
-scripts/firecrawl.sh crawl "https://docs.firecrawl.dev" 20 2
-```
+Recursive crawl with job polling. Returns full markdown for each page.
+
+## Key Strengths
+
+- **No output truncation** — Full content passes through for all commands
+- **PDF support** — Parses PDFs natively (use parsers option for OCR on scanned docs)
+- **Batch processing** — `batch-scrape` handles many URLs in parallel
+- **JS rendering** — `waitFor` option for SPAs that need client-side rendering
+- **Anti-bot bypass** — `"proxy":"stealth"` for Cloudflare-protected sites
+- **Site mapping** — `map` discovers all URLs on a domain for targeted scraping
 
 ## Critical Rules
 
-1. **Scrape for single pages** - Use `scrape` when you have specific URLs
-2. **Map before crawl** - Use `map` to discover URLs, then scrape specific ones
-3. **Search for discovery** - Use `search` to find relevant pages when you don't know URLs
-4. **Extract for structure** - Use `extract` when you need JSON, not markdown
-5. **Respect rate limits** - Script auto-retries on 429 with key rotation
-6. **Current year is 2026** - Use this when recency matters; omit for timeless topics or use older years when historically relevant
+1. **Map before batch-scrape** — Use `map` to discover URLs, then `batch-scrape` the relevant ones
+2. **Scrape for single pages** — Use `scrape` when you have one specific URL
+3. **Use TinyFish for simple HTML fetching** — TinyFish returns more content for plain HTML pages
+4. **Use Firecrawl for PDFs** — TinyFish cannot parse PDFs; Firecrawl handles them natively
+5. **waitFor for SPAs** — Add `'{"waitFor":3000}'` for JS-heavy sites that load content dynamically
+6. **Extract for structure** — Use `extract` when you need JSON, not markdown
 
 ## Resources
 
