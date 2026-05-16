@@ -392,16 +392,17 @@ cmd_crawl() {
     
     echo "Crawl started. Job ID: $job_id"
     echo "Polling for results..."
-    
-    # Poll for completion (max 60 seconds)
+
+    sleep 3
+
     local poll_count=0
     local max_polls=30
     while [[ $poll_count -lt $max_polls ]]; do
         sleep 2
         local status_response
-        if ! status_response=$(do_request "GET" "/crawl/$job_id" ""); then
-            echo "ERROR: Failed to get crawl status" >&2
-            exit 1
+        if ! status_response=$(do_request "GET" "/crawl/$job_id" "" 2>/dev/null); then
+            poll_count=$((poll_count + 1))
+            continue
         fi
         
         local status
@@ -492,14 +493,16 @@ cmd_batch_scrape() {
     echo "Batch scrape started. Job ID: $job_id" >&2
     echo "Polling for results..." >&2
 
+    sleep 3
+
     local poll_count=0
     local max_polls=60
     while [[ $poll_count -lt $max_polls ]]; do
         sleep 2
         local status_response
-        if ! status_response=$(do_request "GET" "/batch/scrape/$job_id" ""); then
-            echo "ERROR: Failed to get batch scrape status" >&2
-            exit 1
+        if ! status_response=$(do_request "GET" "/batch/scrape/$job_id" "" 2>/dev/null); then
+            poll_count=$((poll_count + 1))
+            continue
         fi
 
         local status
